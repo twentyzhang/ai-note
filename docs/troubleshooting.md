@@ -12,6 +12,7 @@
 | `Could not resolve dependency ... peer vite@` | 1.3 |
 | `electron.exe 不存在` / `path.txt 不存在` | 1.4 |
 | `ERR_REQUIRE_ESM ... html-encoding-sniffer` | 1.5 |
+| `crypto.hash is not a function` | 1.6 |
 | `error TS2503: Cannot find namespace 'JSX'` | 2.1 |
 | `error TS2307: Cannot find module '...?url'` | 2.2 |
 | preload 静默不执行、界面里 `window.api` 是 undefined | 2.3 |
@@ -31,7 +32,7 @@
 | 依赖 | 版本 | 为什么不能用更新版 |
 |---|---|---|
 | electron | 33.x | 44.x 声明 `engines.node >= 22.12`，安装脚本直接失败 |
-| vite | 7.x | 8.x 与 electron-vite 5 的 peer 依赖冲突 |
+| vite | 6.x | 7.x 的 dev server 调用了 Node 20.12 才有的 `crypto.hash`；8.x 与 electron-vite 5 的 peer 依赖冲突 |
 | vitest | 3.x | 4.x 需要 vite 8 |
 | pdfjs-dist | 4.x | 6.x 声明 `engines.node >= 22.13` |
 | jsdom | 24.x | 30.x 的传递依赖在 Node 20.11 下 `ERR_REQUIRE_ESM` |
@@ -148,6 +149,48 @@ Error: require() of ES Module .../@exodus/bytes/encoding-lite.js from .../html-e
 **根因**：jsdom 30 的传递依赖要求 Node ≥ 20.19，同样是 `require(ESM)` 的限制。
 
 **修复**：`npm i -D jsdom@24`
+---
+
+### 1.6 Vite 7 的 dev server 要 Node 20.12（crypto.hash is not a function）
+
+**症状**
+
+`npm run build` 一切正常，但 `npm run dev` 直接崩：
+
+```
+error during start dev server and electron app:
+TypeError: crypto.hash is not a function
+    at getHash (file:///.../node_modules/vite/dist/node/chunks/config.js:2444:19)
+    at getLockfileHash (...)
+    at getDepHash (...)
+    at initDepsOptimizerMetadata (...)
+    at createDepsOptimizer (...)
+    at new DevEnvironment (...)
+```
+
+**根因**：Vite 7 的依赖预打包与 dev server 用到了 `crypto.hash`，这个 API **Node 20.12 才有**。本机是 20.11.1，所以它是 undefined：
+
+```
+node -e "console.log(typeof require('node:crypto').hash)"   # 输出 undefined
+```
+
+`npm run build` 走的是另一条代码路径，不碰这个 API——**所以"构建通过"完全不能说明 dev 能跑**。
+
+**修复**
+
+```bash
+npm i -D vite@6
+```
+
+Vite 6 对 Node 的要求是 18 / 20 / 22 通用，不依赖该 API，且仍在 electron-vite 5 支持的 peer 范围内。装完确认：
+
+```
+node -e "console.log(require('vite/package.json').version)"   # 应为 6.x
+```
+
+**验证**：必须实际跑一次 `npm run dev`，看到 `dev server running ... ➜ Local: http://localhost:5173/` 与 `starting electron app...`，窗口能起来，且 stderr 为空。**不要用 `npm run build` 代替这一步。**
+
+**预防**：动过 Node 或构建工具版本之后，`build`、`test`、`dev` **三条路径都要各跑一次**——它们依赖的 Node API 并不相同。
 ---
 
 ## 二、构建与类型
