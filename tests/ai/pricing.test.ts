@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateCost, estimateTokens, formatCost } from '../../src/main/ai/pricing'
+import { estimateCost, estimateTokens, formatCost } from '../../src/shared/pricing'
 
 describe('token 估算', () => {
   it('纯英文按约 4 字符 1 token', () => {

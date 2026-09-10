@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { PDF_SCALE } from '../lib/scrollSync'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -22,7 +23,7 @@ export default function PdfPages({ data }: Props): JSX.Element {
     task.promise
       .then(async (doc) => {
         if (cancelled) return
-        const scale = 1.5
+        const scale = PDF_SCALE
         for (let n = 1; n <= doc.numPages; n++) {
           const page = await doc.getPage(n)
           const viewport = page.getViewport({ scale })

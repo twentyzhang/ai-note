@@ -1,4 +1,4 @@
-import type { TokenUsage } from '../../shared/types'
+import type { TokenUsage } from './types'
 
 const CJK = /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef]/
 

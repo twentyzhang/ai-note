@@ -12,7 +12,13 @@ export default function App(): JSX.Element {
   if (view === 'settings') return <SettingsView onBack={() => setView('library')} />
 
   if (view === 'reader' && openPaperId) {
-    return <ReaderView paperId={openPaperId} onBack={() => setView('library')} />
+    return (
+      <ReaderView
+        paperId={openPaperId}
+        onBack={() => setView('library')}
+        onOpenSettings={() => setView('settings')}
+      />
+    )
   }
 
   return (
