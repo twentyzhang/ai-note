@@ -125,6 +125,28 @@ export default function SettingsView({ onBack }: Props): JSX.Element {
             onChange={(event) => update('maxBatchBlocks', Number(event.target.value))}
           />
         </label>
+        <label>
+          输入单价（元 / 百万 token）
+          <input
+            type="number"
+            step="0.01"
+            value={draft.pricePerMTokIn ?? ''}
+            onChange={(event) =>
+              update('pricePerMTokIn', event.target.value === '' ? null : Number(event.target.value))
+            }
+          />
+        </label>
+        <label>
+          输出单价（元 / 百万 token）
+          <input
+            type="number"
+            step="0.01"
+            value={draft.pricePerMTokOut ?? ''}
+            onChange={(event) =>
+              update('pricePerMTokOut', event.target.value === '' ? null : Number(event.target.value))
+            }
+          />
+        </label>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>

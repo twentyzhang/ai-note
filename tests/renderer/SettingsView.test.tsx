@@ -73,6 +73,28 @@ describe('设置页', () => {
     expect(saved.model).toBe('deepseek-reasoner')
   })
 
+  it('可以填写单价，保存时一并带上', async () => {
+    saveProfile.mockResolvedValue(undefined)
+    render(<SettingsView onBack={() => {}} />)
+    const inputPrice = await screen.findByLabelText(/输入单价/)
+    fireEvent.change(inputPrice, { target: { value: '2' } })
+    fireEvent.click(await screen.findByRole('button', { name: /保存/ }))
+
+    await waitFor(() => expect(saveProfile).toHaveBeenCalled())
+    expect((saveProfile.mock.calls[0][0] as AiProfile).pricePerMTokIn).toBe(2)
+  })
+
+  it('单价留空表示未知，不会变成 0', async () => {
+    saveProfile.mockResolvedValue(undefined)
+    render(<SettingsView onBack={() => {}} />)
+    const outputPrice = await screen.findByLabelText(/输出单价/)
+    fireEvent.change(outputPrice, { target: { value: '' } })
+    fireEvent.click(await screen.findByRole('button', { name: /保存/ }))
+
+    await waitFor(() => expect(saveProfile).toHaveBeenCalled())
+    expect((saveProfile.mock.calls[0][0] as AiProfile).pricePerMTokOut).toBeNull()
+  })
+
   it('测试连接成功时给出中文成功提示', async () => {
     testConnection.mockResolvedValue({ ok: true, message: '连接成功，模型可用' })
     render(<SettingsView onBack={() => {}} />)
