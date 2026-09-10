@@ -12,3 +12,6 @@ out/
 *.log
 .DS_Store
 Thumbs.db
+
+# 测试用的论文原文（受版权保护，不入库）
+*.pdf

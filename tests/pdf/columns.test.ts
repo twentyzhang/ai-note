@@ -1,59 +1,54 @@
 import { describe, expect, it } from 'vitest'
-import { assignColumns, detectColumns } from '../../src/main/pdf/columns'
-import type { Line } from '../../src/shared/types'
+import { columnOf, detectGutter } from '../../src/main/pdf/columns'
+import type { TextItem } from '../../src/shared/types'
 
-function line(x: number, y: number, text = 'text'): Line {
-  return { page: 1, text, x, right: x + 200, y, bottom: y + 12, fontSize: 10, column: 0 }
+const PAGE_WIDTH = 595
+
+function item(x: number, y: number, w = 200): TextItem {
+  return { text: 'x', x, y, w, h: 12, fontSize: 10 }
 }
 
-function twoColumnLines(): Line[] {
-  const lines: Line[] = []
-  for (let i = 0; i < 20; i++) lines.push(line(60, 100 + i * 14, `left ${i}`))
-  for (let i = 0; i < 20; i++) lines.push(line(310, 100 + i * 14, `right ${i}`))
-  return lines
+function twoColumnItems(): TextItem[] {
+  const items: TextItem[] = []
+  for (let i = 0; i < 30; i++) items.push(item(60, 100 + i * 14))
+  for (let i = 0; i < 30; i++) items.push(item(310, 100 + i * 14))
+  return items
 }
 
-describe('分栏检测', () => {
-  it('左右两簇的文档能检测出分界点', () => {
-    const split = detectColumns(twoColumnLines(), 595)
+describe('栏缝检测', () => {
+  it('双栏页面能检测出中间的竖直空白带', () => {
+    const split = detectGutter(twoColumnItems(), PAGE_WIDTH)
     expect(split).not.toBeNull()
-    expect(split!).toBeGreaterThan(60)
+    expect(split!).toBeGreaterThan(260)
     expect(split!).toBeLessThan(310)
   })
 
-  it('单栏文档返回 null', () => {
-    const lines: Line[] = []
-    for (let i = 0; i < 30; i++) lines.push(line(60, 100 + i * 14))
-    expect(detectColumns(lines, 595)).toBeNull()
+  it('单栏页面返回 null', () => {
+    const items: TextItem[] = []
+    for (let i = 0; i < 30; i++) items.push(item(60, 100 + i * 14))
+    expect(detectGutter(items, PAGE_WIDTH)).toBeNull()
   })
 
-  it('行数太少时不判为分栏', () => {
-    expect(detectColumns([line(60, 100), line(310, 120)], 595)).toBeNull()
+  it('右侧几乎没内容时不判为双栏', () => {
+    const items: TextItem[] = []
+    for (let i = 0; i < 100; i++) items.push(item(60, 100 + i * 12))
+    items.push(item(310, 100), item(310, 120), item(310, 140))
+    expect(detectGutter(items, PAGE_WIDTH)).toBeNull()
   })
 
-  it('一侧行数占比过低时不判为分栏', () => {
-    const lines: Line[] = []
-    for (let i = 0; i < 30; i++) lines.push(line(60, 100 + i * 14))
-    lines.push(line(310, 100), line(310, 120), line(310, 140))
-    expect(detectColumns(lines, 595)).toBeNull()
+  it('条目太少时不做判断', () => {
+    expect(detectGutter([item(60, 100), item(310, 120)], PAGE_WIDTH)).toBeNull()
   })
 })
 
 describe('栏归属', () => {
-  it('按分界点把行分到两栏', () => {
-    const lines = assignColumns(twoColumnLines(), 285)
-    expect(lines.filter((l) => l.column === 0)).toHaveLength(20)
-    expect(lines.filter((l) => l.column === 1)).toHaveLength(20)
+  it('按栏缝把片段分到左右栏', () => {
+    expect(columnOf(item(60, 100), 285)).toBe(0)
+    expect(columnOf(item(310, 100), 285)).toBe(1)
   })
 
-  it('单栏时所有行的 column 都是 0', () => {
-    const lines = assignColumns([line(60, 100), line(70, 120)], null)
-    expect(lines.every((l) => l.column === 0)).toBe(true)
-  })
-
-  it('不修改传入的数组', () => {
-    const input = twoColumnLines()
-    assignColumns(input, 285)
-    expect(input.every((l) => l.column === 0)).toBe(true)
+  it('单栏时全部归到第 0 栏', () => {
+    expect(columnOf(item(60, 100), null)).toBe(0)
+    expect(columnOf(item(310, 100), null)).toBe(0)
   })
 })

@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { buildBlocks, classifyLine, mergeIntoParagraphs } from '../../src/main/pdf/blocks'
 import type { Line } from '../../src/shared/types'
 
-const PAGE_WIDTH = 595
-
 function line(partial: Partial<Line> & { text: string; y: number }): Line {
   const { text, y, ...rest } = partial
   return {
@@ -65,38 +63,46 @@ describe('行合并成段落', () => {
 })
 
 describe('整页段落重建', () => {
-  it('双栏页面的阅读顺序是先左栏再右栏', () => {
+  function twoColumnLines(): Line[] {
     const lines: Line[] = []
     for (let i = 0; i < 10; i++) {
-      lines.push(line({ text: `LEFT ${i}`, x: 60, y: 120 + i * 14, right: 280 }))
+      lines.push(line({ text: `LEFT ${i}`, x: 60, y: 120 + i * 14, right: 280, column: 0 }))
     }
     for (let i = 0; i < 10; i++) {
-      lines.push(line({ text: `RIGHT ${i}`, x: 310, y: 120 + i * 14, right: 530 }))
+      lines.push(line({ text: `RIGHT ${i}`, x: 310, y: 120 + i * 14, right: 530, column: 1 }))
     }
-    const blocks = buildBlocks([lines], PAGE_WIDTH)
+    return lines
+  }
+
+  it('先输出左栏的全部段落，再输出右栏的', () => {
+    const blocks = buildBlocks([twoColumnLines()])
     const text = blocks.map((b) => b.text).join('|')
     expect(text.indexOf('LEFT 0')).toBeLessThan(text.indexOf('RIGHT 0'))
-    expect(text).toContain('LEFT 9')
+    expect(text.indexOf('LEFT 9')).toBeLessThan(text.indexOf('RIGHT 0'))
     expect(text).toContain('RIGHT 9')
   })
 
+  it('左右两栏的段落不会被合并到一起', () => {
+    const blocks = buildBlocks([twoColumnLines()])
+    for (const block of blocks) {
+      if (block.text.includes('LEFT')) expect(block.text).not.toContain('RIGHT')
+      if (block.text.includes('RIGHT')) expect(block.text).not.toContain('LEFT')
+    }
+  })
+
   it('段落 ID 按页码与页内序号生成', () => {
-    const blocks = buildBlocks(
-      [
-        [line({ text: 'a', y: 100, page: 1 })],
-        [line({ text: 'b', y: 100, page: 2 })]
-      ],
-      PAGE_WIDTH
-    )
+    const blocks = buildBlocks([
+      [line({ text: 'a', y: 100, page: 1 })],
+      [line({ text: 'b', y: 100, page: 2 })]
+    ])
     expect(blocks[0].id).toBe('p1-b00')
     expect(blocks[1].id).toBe('p2-b00')
   })
 
   it('块的包围盒覆盖段内所有行', () => {
-    const blocks = buildBlocks(
-      [[line({ text: 'a', y: 100, right: 500 }), line({ text: 'b', y: 114, right: 500 })]],
-      PAGE_WIDTH
-    )
+    const blocks = buildBlocks([
+      [line({ text: 'a', y: 100, right: 500 }), line({ text: 'b', y: 114, right: 500 })]
+    ])
     expect(blocks[0].bbox.y).toBe(100)
     expect(blocks[0].bbox.h).toBe(26)
   })

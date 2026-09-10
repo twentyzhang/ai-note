@@ -61,7 +61,15 @@ describe('导入单篇论文', () => {
     const entry = await importPdf(root, await writeFixture('c.pdf', await makeTwoColumnPdf()))
     const blocks = await readJson<BlocksFile>(libraryPaths(root, entry.id).blocks)
     const text = blocks!.blocks.map((b) => b.text).join('|')
-    expect(text.indexOf('LEFT 0')).toBeLessThan(text.indexOf('RIGHT 0'))
+    const texts = blocks!.blocks.map((b) => b.text)
+    const leftZero = texts.findIndex((t) => t.includes('LEFT 0'))
+    const rightZero = texts.findIndex((t) => t.includes('RIGHT 0'))
+    expect(leftZero).toBeGreaterThanOrEqual(0)
+    expect(rightZero).toBeGreaterThan(leftZero)
+    for (const t of texts) {
+      if (t.includes('LEFT ')) expect(t).not.toContain('RIGHT ')
+      if (t.includes('RIGHT ')) expect(t).not.toContain('LEFT ')
+    }
   })
 
   it('损坏的 PDF 被拒绝并给出中文原因', async () => {
