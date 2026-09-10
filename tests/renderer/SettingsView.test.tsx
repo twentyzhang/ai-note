@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => {
   return target
 })
 
-const { getConfig, listProfiles, saveProfile, testConnection } = mocks
+const { getConfig, listProfiles, saveProfile, saveConfig, testConnection } = mocks
 
 const profile: AiProfile = {
   id: 'p1',
@@ -51,30 +51,41 @@ beforeEach(() => {
   ;(globalThis as unknown as { window: { api: unknown } }).window.api = mocks
   getConfig.mockResolvedValue(config)
   listProfiles.mockResolvedValue([profile])
+  saveConfig.mockResolvedValue(undefined)
+  saveProfile.mockResolvedValue(undefined)
 })
 
 describe('设置页', () => {
   it('加载后显示已有的 AI 配置', async () => {
     render(<SettingsView onBack={() => {}} />)
-    expect(await screen.findByDisplayValue('DeepSeek')).toBeInTheDocument()
     expect(await screen.findByDisplayValue('deepseek-chat')).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('https://api.deepseek.com/v1')).toBeInTheDocument()
+  })
+
+  it('页面顶部显示当前正在使用哪套配置', async () => {
+    render(<SettingsView onBack={() => {}} />)
+    expect(await screen.findByText(/当前使用：DeepSeek/)).toBeInTheDocument()
   })
 
   it('保存时把改动写回去', async () => {
-    saveProfile.mockResolvedValue(undefined)
     render(<SettingsView onBack={() => {}} />)
     const modelInput = await screen.findByDisplayValue('deepseek-chat')
     fireEvent.change(modelInput, { target: { value: 'deepseek-reasoner' } })
-
     fireEvent.click(await screen.findByRole('button', { name: /保存/ }))
 
     await waitFor(() => expect(saveProfile).toHaveBeenCalled())
-    const saved = saveProfile.mock.calls[0][0] as AiProfile
-    expect(saved.model).toBe('deepseek-reasoner')
+    expect((saveProfile.mock.calls[0][0] as AiProfile).model).toBe('deepseek-reasoner')
+  })
+
+  it('保存配置时会把"当前使用"指向它', async () => {
+    render(<SettingsView onBack={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: /保存/ }))
+
+    await waitFor(() => expect(saveConfig).toHaveBeenCalled())
+    expect((saveConfig.mock.calls[0][0] as AppConfig).activeProfileId).toBe('p1')
   })
 
   it('可以填写单价，保存时一并带上', async () => {
-    saveProfile.mockResolvedValue(undefined)
     render(<SettingsView onBack={() => {}} />)
     const inputPrice = await screen.findByLabelText(/输入单价/)
     fireEvent.change(inputPrice, { target: { value: '2' } })
@@ -85,7 +96,6 @@ describe('设置页', () => {
   })
 
   it('单价留空表示未知，不会变成 0', async () => {
-    saveProfile.mockResolvedValue(undefined)
     render(<SettingsView onBack={() => {}} />)
     const outputPrice = await screen.findByLabelText(/输出单价/)
     fireEvent.change(outputPrice, { target: { value: '' } })

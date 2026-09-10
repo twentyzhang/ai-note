@@ -19,6 +19,7 @@ import {
   getApiKey,
   listProfiles,
   loadConfig,
+  resolveActiveProfile,
   saveConfig,
   setApiKey,
   upsertProfile
@@ -132,9 +133,8 @@ export function registerIpc(root: string): void {
   })
 
   ipcMain.handle(IPC.translateStart, async (event, paperId: string): Promise<void> => {
-    const config = await loadConfig(cfgRoot)
-    const profile = (await listProfiles(cfgRoot)).find((p) => p.id === config.activeProfileId)
-    if (!profile) throw new Error('还没有选择 AI 配置，请先到设置里添加')
+    const profile = await resolveActiveProfile(cfgRoot)
+    if (!profile) throw new Error('还没有添加 AI 配置，请先到设置里添加')
 
     const blocksFile = await readJson<BlocksFile>(libraryPaths(root, paperId).blocks)
     if (!blocksFile) throw new Error('找不到这篇论文的段落数据')
@@ -160,9 +160,8 @@ export function registerIpc(root: string): void {
   })
 
   ipcMain.handle(IPC.translateSelection, async (_event, text: string): Promise<string> => {
-    const config = await loadConfig(cfgRoot)
-    const profile = (await listProfiles(cfgRoot)).find((p) => p.id === config.activeProfileId)
-    if (!profile) throw new Error('还没有选择 AI 配置，请先到设置里添加')
+    const profile = await resolveActiveProfile(cfgRoot)
+    if (!profile) throw new Error('还没有添加 AI 配置，请先到设置里添加')
 
     const result = await chatComplete({
       profile,

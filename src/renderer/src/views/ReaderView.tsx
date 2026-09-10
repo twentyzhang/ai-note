@@ -66,7 +66,7 @@ export default function ReaderView({ paperId, onBack, onOpenSettings }: Props): 
     void (async () => {
       const config = await api.getConfig()
       const profiles = await api.listProfiles()
-      const active = profiles.find((p) => p.id === config.activeProfileId)
+      const active = profiles.find((p) => p.id === config.activeProfileId) ?? profiles[0]
       if (!cancelled && active) {
         setPrices({ in: active.pricePerMTokIn, out: active.pricePerMTokOut })
       }

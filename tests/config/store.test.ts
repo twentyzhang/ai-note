@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMemoryBox } from '../../src/main/config/secrets'
 import {
   deleteProfile,
+  resolveActiveProfile,
   getApiKey,
   listProfiles,
   loadConfig,
@@ -118,5 +119,40 @@ describe('密钥存储', () => {
     await setApiKey(root, 'p1', 'sk-abc', box)
     await fs.writeFile(join(root, 'ai-keys.json'), JSON.stringify({ p1: '坏掉的密文' }), 'utf8')
     expect(await getApiKey(root, 'p1', box)).toBeNull()
+  })
+})
+
+describe('解析当前使用的配置', () => {
+  it('按配置里的 activeProfileId 找到对应档案', async () => {
+    await upsertProfile(root, profile('p1', '甲'))
+    await upsertProfile(root, profile('p2', '乙'))
+    await saveConfig(root, {
+      version: 1,
+      libraryRoot: 'C:/papers',
+      activeProfileId: 'p2',
+      targetLang: 'zh'
+    })
+    expect((await resolveActiveProfile(root))?.name).toBe('乙')
+  })
+
+  it('没有指定时就退回第一套，而不是报“没有配置”', async () => {
+    await upsertProfile(root, profile('p1', '甲'))
+    const active = await resolveActiveProfile(root)
+    expect(active?.id).toBe('p1')
+  })
+
+  it('activeProfileId 指向已删除的配置时也退回第一套', async () => {
+    await upsertProfile(root, profile('p1', '甲'))
+    await saveConfig(root, {
+      version: 1,
+      libraryRoot: 'C:/papers',
+      activeProfileId: '已经不存在的id',
+      targetLang: 'zh'
+    })
+    expect((await resolveActiveProfile(root))?.id).toBe('p1')
+  })
+
+  it('一套配置都没有时返回 null', async () => {
+    expect(await resolveActiveProfile(root)).toBeNull()
   })
 })

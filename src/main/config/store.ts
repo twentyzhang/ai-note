@@ -90,3 +90,14 @@ export async function getApiKey(
     return null
   }
 }
+/**
+ * 找出"当前该用哪套配置"。
+ * 优先按 config.activeProfileId 找；找不到（没设置、或那套已被删除）就退回第一套。
+ * 之所以要兜底：用户刚添加完配置就去点翻译，是最常见的路径，
+ * 这里必须给出一个可用的结果，而不是让功能直接报错。
+ */
+export async function resolveActiveProfile(root: string): Promise<AiProfile | null> {
+  const [config, profiles] = await Promise.all([loadConfig(root), listProfiles(root)])
+  if (profiles.length === 0) return null
+  return profiles.find((p) => p.id === config.activeProfileId) ?? profiles[0]
+}
