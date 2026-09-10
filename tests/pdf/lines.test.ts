@@ -64,3 +64,40 @@ describe('文本片段合并成行', () => {
     expect(lines[0].column).toBe(0)
   })
 })
+
+describe('双栏页面', () => {
+  function twoColumnPage(): RawPage {
+    const items: TextItem[] = []
+    for (let i = 0; i < 30; i++) {
+      items.push(item({ text: `LEFT ${i}`, x: 60, y: 100 + i * 14, w: 200 }))
+    }
+    for (let i = 0; i < 30; i++) {
+      items.push(item({ text: `RIGHT ${i}`, x: 310, y: 100 + i * 14, w: 200 }))
+    }
+    return page(items)
+  }
+
+  it('同一基线上的左右栏文字不会被拼成同一行', () => {
+    const lines = buildLines(twoColumnPage())
+    expect(lines).toHaveLength(60)
+    for (const line of lines) {
+      expect(line.text.startsWith('LEFT')).toBe(line.column === 0)
+      expect(line.text.startsWith('RIGHT')).toBe(line.column === 1)
+    }
+  })
+
+  it('输出顺序是先左栏读完再读右栏', () => {
+    const lines = buildLines(twoColumnPage())
+    const lastLeft = lines.findIndex((l) => l.text === 'LEFT 29')
+    const firstRight = lines.findIndex((l) => l.text === 'RIGHT 0')
+    expect(lastLeft).toBeGreaterThanOrEqual(0)
+    expect(firstRight).toBeGreaterThan(lastLeft)
+  })
+
+  it('每个片段保留自己的完整文本，不与其他栏混合', () => {
+    const lines = buildLines(twoColumnPage())
+    const leftZero = lines.find((l) => l.text.startsWith('LEFT 0'))
+    expect(leftZero?.text).toBe('LEFT 0')
+    expect(leftZero?.text).not.toContain('RIGHT')
+  })
+})

@@ -1,4 +1,5 @@
 import type { Line, RawPage, TextItem } from '../../shared/types'
+import { columnOf, detectGutter } from './columns'
 
 function groupByBaseline(items: TextItem[]): TextItem[][] {
   const sorted = [...items].sort((a, b) => a.y - b.y || a.x - b.x)
@@ -31,24 +32,36 @@ function joinItems(items: TextItem[]): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
+function makeLine(page: number, group: TextItem[], column: number): Line {
+  return {
+    page,
+    text: joinItems(group),
+    x: Math.min(...group.map((i) => i.x)),
+    right: Math.max(...group.map((i) => i.x + i.w)),
+    y: Math.min(...group.map((i) => i.y)),
+    bottom: Math.max(...group.map((i) => i.y + i.h)),
+    fontSize: Math.max(...group.map((i) => i.fontSize)),
+    column
+  }
+}
+
+/**
+ * 先分栏，再在各栏内部按基线合并成行，最后按「左栏读完再读右栏」的顺序输出。
+ */
 export function buildLines(page: RawPage): Line[] {
-  return groupByBaseline(page.items.filter((i) => i.text.trim().length > 0))
-    .map((group) => {
-      const x = Math.min(...group.map((i) => i.x))
-      const right = Math.max(...group.map((i) => i.x + i.w))
-      const y = Math.min(...group.map((i) => i.y))
-      const bottom = Math.max(...group.map((i) => i.y + i.h))
-      const fontSize = Math.max(...group.map((i) => i.fontSize))
-      return {
-        page: page.page,
-        text: joinItems(group),
-        x,
-        right,
-        y,
-        bottom,
-        fontSize,
-        column: 0
-      }
-    })
-    .filter((line) => line.text.length > 0)
+  const items = page.items.filter((i) => i.text.trim().length > 0)
+  if (items.length === 0) return []
+
+  const split = detectGutter(items, page.width)
+  const buckets: TextItem[][] = [[], []]
+  for (const item of items) buckets[columnOf(item, split)].push(item)
+
+  const lines: Line[] = []
+  for (let column = 0; column < buckets.length; column++) {
+    if (split === null && column === 1) break
+    for (const group of groupByBaseline(buckets[column])) {
+      lines.push(makeLine(page.page, group, column))
+    }
+  }
+  return lines
 }

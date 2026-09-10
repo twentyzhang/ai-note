@@ -1,10 +1,10 @@
-import type { JSX } from 'react'
+import { useState, type JSX } from 'react'
+import LibraryView from './views/LibraryView'
+import ReaderView from './views/ReaderView'
 
 export default function App(): JSX.Element {
-  return (
-    <div style={{ padding: 24, fontFamily: 'system-ui, sans-serif' }}>
-      <h1>AI 论文阅读助手</h1>
-      <p>工程骨架已就绪。</p>
-    </div>
-  )
+  const [openPaperId, setOpenPaperId] = useState<string | null>(null)
+
+  if (!openPaperId) return <LibraryView onOpenPaper={setOpenPaperId} />
+  return <ReaderView paperId={openPaperId} onBack={() => setOpenPaperId(null)} />
 }
