@@ -16,6 +16,7 @@
 | `error TS2503: Cannot find namespace 'JSX'` | 2.1 |
 | `error TS2307: Cannot find module '...?url'` | 2.2 |
 | preload 静默不执行、界面里 `window.api` 是 undefined | 2.3 |
+| `Setting up fake worker failed` / `Cannot find module ... pdf.worker.mjs` | 2.4 |
 | `environmentMatchGlobs is deprecated` | 3.1 |
 | 测试里 `window.api` 是 undefined | 3.2 |
 | `Cannot polyfill DOMMatrix / ImageData / Path2D` | 3.3 |
@@ -259,6 +260,75 @@ Get-Content $errLog     # 应当是空
 
 **预防**：改动了构建产物路径或 `type` 字段后，务必回头核对主进程里所有 `join(__dirname, ...)` 的引用。
 
+---
+
+### 2.4 打包后 pdf.js 找不到自己的 worker
+
+**症状**
+
+点"导入 PDF"并选中论文后，界面上出现：
+
+```
+F:\...\某论文.pdf：Setting up fake worker failed: "Cannot find module
+'F:\demos\ai-note\out\main\pdf.worker.mjs' imported from F:\demos\ai-note\out\main\index.js".
+```
+
+**根因：把 pdf.js 内联进了主进程包。**
+
+`electron.vite.config.ts` 里原本写的是：
+
+```ts
+main: { plugins: [externalizeDepsPlugin({ exclude: ['pdfjs-dist'] })] }
+```
+
+`exclude` 的意思是"不要外部化它"，即**把 pdf.js 整个打包进主进程产物**——产物因此从 16KB 涨到 802KB。而 pdf.js 在 Node 环境下会**动态 import 自己的 worker 文件**；Rollup 处理这个动态导入时，把它改写成相对于打包输出目录的 `./pdf.worker.mjs`，可 `out/main/` 里只有 `index.js`，于是运行时报找不到模块。
+
+**为什么单元测试发现不了**：vitest 直接从 `node_modules` 解析模块，路径天然是对的；**只有打包产物才会走错路径**。所以这一类问题必须在"真实启动应用"这一层验证。
+
+**修复**
+
+```ts
+main: { plugins: [externalizeDepsPlugin()] }
+```
+
+保持 pdfjs-dist 为外部依赖，运行时从 `node_modules` 解析。产物体积回落到 16KB，里面保留的是：
+
+```js
+import { getDocument, VerbosityLevel } from "pdfjs-dist/legacy/build/pdf.mjs";
+```
+
+这样 pdf.js 从 node_modules 里加载，就能在同目录找到自己的 `pdf.worker.mjs`。
+
+**验证**：单元测试和构建都**证明不了**这个修复。要在真实 Electron 运行时里跑一个临时探针——写一个 CJS 文件放在项目根目录（放根目录是为了让模块解析能找到 node_modules），内容大致是：
+
+```js
+const { app } = require('electron')
+const fs = require('node:fs')
+app.whenReady().then(async () => {
+  try {
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const data = new Uint8Array(fs.readFileSync(process.argv[2]))
+    const doc = await pdfjs.getDocument({ data }).promise
+    const page = await doc.getPage(1)
+    const content = await page.getTextContent()
+    console.log('PROBE-OK pages=' + doc.numPages + ' page1Items=' + content.items.length)
+    await doc.destroy()
+  } catch (e) {
+    console.log('PROBE-FAIL ' + e.message)
+  }
+  app.quit()
+})
+```
+
+然后用 Electron 直接跑它（而不是用 node），跑完删掉探针文件：
+
+```powershell
+& node_modules\electron\dist\electron.exe probe-pdf.cjs "某篇论文.pdf"
+```
+
+期望输出 `PROBE-OK pages=... page1Items=...`。本次修复后的实测结果是 `PROBE-OK pages=6 page1Items=268`。
+
+**预防**：凡是**在运行时动态加载自己附属文件**的库（worker、wasm、字体、字典、模型文件），一律不要内联进 bundle，必须保持外部依赖。判断信号有两个：产物体积相对该库的大小暴涨；产物里出现该库的资源文件名（如 `pdf.worker.mjs`）却被改写成相对路径。
 ---
 
 ## 三、测试

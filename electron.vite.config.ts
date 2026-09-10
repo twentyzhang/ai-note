@@ -4,7 +4,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['pdfjs-dist'] })],
+    // pdfjs-dist 必须保持外部依赖：内联进主进程包会让它动态加载 pdf.worker.mjs 的相对路径失效
+    plugins: [externalizeDepsPlugin()],
     build: { rollupOptions: { input: { index: resolve('src/main/index.ts') } } }
   },
   preload: {
