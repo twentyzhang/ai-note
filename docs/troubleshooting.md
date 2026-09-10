@@ -25,6 +25,11 @@
 | 测试全绿但真实数据一跑就错 | 4.3 |
 | 大文件被误提交进 git | 5.1 |
 | 沙箱坏了怎么办 | 5.2 |
+| React `act(...)` 警告 | 7.1 |
+| `task.destroy is not a function` | 7.2 |
+| PowerShell 单引号 here-string 里的反引号 n 不换行 | 7.3 |
+| `RedirectStandardOutput and RedirectStandardError are same` | 7.4 |
+| 翻译很慢且一直标记失败 | 7.5 |
 
 ## 当前依赖基线
 
@@ -573,3 +578,104 @@ git commit --amend --no-edit          # 尚未推送，直接修正那次提交
 5. **区分"已知可接受"与"待修问题"。** 3.3 那三条 pdf.js 警告是第三方库在旧 Node 上的环境噪音，功能无影响——把它记成已知问题并写清触发条件，比为了"日志干净"引入 20MB 原生依赖划算。但**必须记录下来**，否则下次会有人重新查一遍。
 
 6. **修复要留证据和留测试。** 每次修完，在 `npm run inspect` 的输出里留一段前后对比，并补一条能抓住它的回归测试。没有回归测试的修复，下次会原样复发。
+---
+
+## 七、第二轮（计划二：AI 与翻译）新增
+
+### 7.1 React 测试里的 act 警告
+
+**症状**
+
+前端测试通过，但输出里混着：
+
+```
+This ensures that you're testing the behavior the user would see in the browser.
+Learn more at https://react.dev/link/wrap-tests-with-act
+```
+
+**根因**：三种写法都会触发——
+
+1. 直接对 DOM 节点调 `.click()`，React 的状态更新发生在 act 之外；
+2. 组件在 `useEffect` 里发起的异步请求，测试结束时才 resolve，更新落在 act 之外；
+3. 用 `fireEvent` 但没等异步更新完成就结束用例。
+
+**修复**
+
+* 一律用 `fireEvent.click(...)`，不要用裸的 `.click()`。
+* 凡是组件挂载后会异步取数的用例，先把结果等出来再断言，例如 `await screen.findByText('x')`，再执行后续交互。
+* 需要用户输入时用 `fireEvent.change(input, { target: { value } })`；**直接给 `input.value` 赋值再派发原生 `input` 事件不生效**，React 的值跟踪器不会认。
+
+**预防**：测试输出必须干净。出现 act 警告说明有用例在"真空中"更新状态，那是隐患，不是噪音。
+
+### 7.2 pdf.js 的测试替身要带 destroy
+
+**症状**
+
+```
+TypeError: task.destroy is not a function
+    at src/renderer/src/components/PdfPages.tsx:49:17
+```
+
+**根因**：测试里把 `pdfjs-dist` 换成了假实现，只给了 `promise`，没有给 `destroy`。而组件卸载时确实会调它。
+
+**修复**：假实现里补上：
+
+```js
+getDocument: () => ({
+  promise: Promise.reject(new Error('测试中不解析真实 PDF')),
+  destroy: () => Promise.resolve()
+})
+```
+
+**预防**：替换第三方库的替身要覆盖组件**实际用到**的全部成员。排查方法：看报错栈指向组件哪一行，就知道替身缺了什么。
+
+### 7.3 PowerShell 单引号 here-string 不会展开反引号转义
+
+**症状**
+
+用 PowerShell 批量改写代码时，写进去的内容里出现了字面的 `` `n `` 而没有被换成换行，生产出语法错误的 TSX：
+
+```
+L163: <section`n          ref={scrollRef}`n          onScroll={handleScroll}`n ...
+```
+
+**根因**：在**单引号**字符串/here-string 里，反引号是普通字符，不参与转义。只有**双引号**字符串里 `` `n `` 才表示换行。
+
+**修复**：需要插入换行时，用真正含换行的 here-string，或者在双引号字符串里写 `` `n ``。**不要**在单引号字符串里指望它变成换行。
+
+**顺带一个坑**：排查时我用 `Select-String -Pattern '\\n'` 去搜字面量反斜杠加 n，结果搜不到——因为真正写进去的是**反引号**加 n，不是反斜杠加 n。改用"按行遍历 + 按特征判断"才定位到。
+
+**预防**：**用脚本批量改源码之后，必须立刻跑一次类型检查或构建**。这类破坏是静默的（写文件不报错），只有编译才会暴露。本次就是靠 `npm run build` 报出的 8 条 TS 错误定位的。
+
+### 7.4 Start-Process 不能把 stdout 与 stderr 重定向到同一个文件
+
+**症状**
+
+```powershell
+$server = Start-Process node -ArgumentList 'scripts/fake-ai.mjs' `
+  -RedirectStandardOutput $log -RedirectStandardError $log
+```
+
+报错：
+
+```
+This command cannot be run because "RedirectStandardOutput" and "RedirectStandardError" are same.
+```
+
+服务根本没起来，但脚本继续往下跑，于是 AI 调用全部连接失败，进入了漫长的重试——**看起来像翻译逻辑出问题，实际是服务没启动**。
+
+**修复**：给两个流各自指定文件。
+
+**预防**：启动后台服务后，**先确认它真的起来了**（打印它的输出、检查进程存活），再跑依赖它的命令。否则会把"环境没准备好"误判成"代码有 bug"。本次这一条如果没注意，很可能白查半小时。
+
+### 7.5 连不上服务时会逐段降级，表现为"很慢但一直标记失败"
+
+**现象（不是 bug，是设计行为）**
+
+服务不可用时，进度条会显示失败数持续增长、但完成数一直是 0，整个过程很慢。原因见计划二第 5 条任务的设计：整批失败后拆成单段逐条重试，每段还要各做三次退避重试。
+
+**这意味着**：一次连接不上，代价是"批次数 × 每批段数 × 3 次重试"。133 段跑下来要几十秒到几分钟。
+
+**怎么判断是环境问题还是代码问题**：看错误分类。`连不上 AI 服务，请检查网络连接或设置里的 Base URL` 属于 `network` 类，几乎总是环境问题（服务没起、端口错、base URL 写错）。先确认服务在不在，再查代码。
+
+**后续可优化**：连续 N 次 `network` 错误后应直接停止整轮，而不是把每一段都试一遍。当前没做，属于已知的体验缺口。

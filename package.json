@@ -37,6 +37,7 @@
     "build": "tsc --noEmit && electron-vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "inspect": "tsx scripts/inspect-import.ts"
+    "inspect": "tsx scripts/inspect-import.ts",
+    "translate": "tsx scripts/translate-paper.ts"
   }
 }
