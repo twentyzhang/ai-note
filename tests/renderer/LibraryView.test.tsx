@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import LibraryView from '../../src/renderer/src/views/LibraryView'
 import type { LibraryEntry } from '../../src/shared/types'
@@ -71,7 +71,7 @@ describe('论文库界面', () => {
 
     render(<LibraryView />)
     const button = await screen.findByRole('button', { name: /导入 PDF/ })
-    button.click()
+    fireEvent.click(button)
 
     await waitFor(() => expect(choosePdfFiles).toHaveBeenCalled())
     expect(await screen.findByText('注意力就是全部')).toBeInTheDocument()
@@ -86,7 +86,7 @@ describe('论文库界面', () => {
     })
 
     render(<LibraryView />)
-    ;(await screen.findByRole('button', { name: /导入 PDF/ })).click()
+    fireEvent.click(await screen.findByRole('button', { name: /导入 PDF/ }))
 
     expect(await screen.findByText(/文件不是有效的 PDF/)).toBeInTheDocument()
   })

@@ -4,6 +4,7 @@ import { api } from '../api'
 
 interface Props {
   onOpenPaper?: (paperId: string) => void
+  onOpenSettings?: () => void
 }
 
 const STATUS_TEXT: Record<LibraryEntry['status'], string> = {
@@ -13,7 +14,7 @@ const STATUS_TEXT: Record<LibraryEntry['status'], string> = {
   failed: '有失败段落'
 }
 
-export default function LibraryView({ onOpenPaper }: Props): JSX.Element {
+export default function LibraryView({ onOpenPaper, onOpenSettings }: Props): JSX.Element {
   const [papers, setPapers] = useState<LibraryEntry[]>([])
   const [problems, setProblems] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
@@ -58,6 +59,8 @@ export default function LibraryView({ onOpenPaper }: Props): JSX.Element {
         <button disabled={busy} onClick={async () => importPaths(await api.choosePdfFiles())}>
           {busy ? '正在导入…' : '导入 PDF'}
         </button>
+        <span style={{ flex: 1 }} />
+        <button onClick={() => onOpenSettings?.()}>设置</button>
       </header>
 
       {problems.length > 0 && (
