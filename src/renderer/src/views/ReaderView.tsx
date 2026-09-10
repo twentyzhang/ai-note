@@ -3,6 +3,7 @@ import { estimateCost, formatCost } from '../../../shared/pricing'
 import type { Block, TranslateProgress, TranslationFile } from '../../../shared/types'
 import { api } from '../api'
 import PdfPages from '../components/PdfPages'
+import SelectionPopover from '../components/SelectionPopover'
 import TranslationPane from '../components/TranslationPane'
 import { PDF_SCALE, pickBlockIdAt } from '../lib/scrollSync'
 
@@ -34,6 +35,7 @@ export default function ReaderView({ paperId, onBack, onOpenSettings }: Props): 
   const [missing, setMissing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState<string | null>(null)
+  const [selection, setSelection] = useState<{ text: string; top: number; left: number } | null>(null)
 
   const scrollRef = useRef<HTMLElement | null>(null)
   const paneRef = useRef<HTMLDivElement | null>(null)
@@ -91,6 +93,18 @@ export default function ReaderView({ paperId, onBack, onOpenSettings }: Props): 
     }
   }
 
+  const handleMouseUp = (): void => {
+    const selected = window.getSelection()
+    const text = selected?.toString().trim() ?? ''
+    if (!selected || text.length <= 1 || selected.rangeCount === 0) return
+    const rect = selected.getRangeAt(0).getBoundingClientRect()
+    setSelection({
+      text,
+      top: Math.min(rect.bottom + 8, Math.max(0, window.innerHeight - 220)),
+      left: Math.min(rect.left, Math.max(0, window.innerWidth - 380))
+    })
+  }
+
   const handleScroll = (): void => {
     if (syncing.current || blocks.length === 0) return
     syncing.current = true
@@ -146,7 +160,12 @@ export default function ReaderView({ paperId, onBack, onOpenSettings }: Props): 
       )}
 
       <main style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <section ref={scrollRef} onScroll={handleScroll} style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+        <section
+          ref={scrollRef}
+          onScroll={handleScroll}
+          onMouseUp={handleMouseUp}
+          style={{ flex: 1, minWidth: 0, overflow: 'auto' }}
+        >
           {loading && <p style={{ padding: 24 }}>正在打开论文…</p>}
           {missing && (
             <p style={{ padding: 24, color: '#b3261e' }}>
@@ -183,6 +202,15 @@ export default function ReaderView({ paperId, onBack, onOpenSettings }: Props): 
           token 输入 {usage.promptTokens} / 输出 {usage.completionTokens}
         </span>
       </footer>
+
+      {selection && (
+        <SelectionPopover
+          text={selection.text}
+          top={selection.top}
+          left={selection.left}
+          onClose={() => setSelection(null)}
+        />
+      )}
     </div>
   )
 }
