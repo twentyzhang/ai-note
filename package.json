@@ -36,7 +36,6 @@
     "dev": "electron-vite dev",
     "build": "tsc --noEmit && electron-vite build",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "fixtures": "tsx tests/fixtures/make-fixtures.ts"
+    "test:watch": "vitest"
   }
 }
