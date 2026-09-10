@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import path, { join } from 'node:path'
 import { estimateCost, formatCost } from '../src/shared/pricing'
 import type { AiProfile, BlocksFile, TranslateProgress } from '../src/shared/types'
 import { importPdf } from '../src/main/library/import'
@@ -13,6 +13,11 @@ function arg(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined
 }
 
+function fail(...lines: string[]): never {
+  for (const line of lines) console.error(line)
+  process.exit(1)
+}
+
 async function main(): Promise<void> {
   const pdf = process.argv[2]
   const baseUrl = arg('base-url')
@@ -22,11 +27,39 @@ async function main(): Promise<void> {
   const keep = process.argv.includes('--keep')
 
   if (!pdf || !baseUrl || !model) {
-    console.error(
-      '用法: npm run translate -- "论文.pdf" --base-url https://api.deepseek.com/v1 --model deepseek-chat'
+    fail(
+      '用法: npm run translate -- "论文.pdf" --base-url https://api.deepseek.com/v1 --model deepseek-chat',
+      '密钥用 --key 传入，或设置环境变量 AI_NOTE_API_KEY（本地模型可留空）'
     )
-    console.error('密钥用 --key 传入，或设置环境变量 AI_NOTE_API_KEY（本地模型可留空）')
-    process.exit(1)
+  }
+
+  if (baseUrl === undefined || !/^https?:\/\//i.test(baseUrl) || /[[\]()\s]/.test(baseUrl)) {
+    fail(
+      `Base URL 看起来不对：${baseUrl}`,
+      '它应当是纯文本地址，例如 https://api.deepseek.com/v1',
+      '不要带方括号或 Markdown 链接格式——聊天窗口常把网址自动加壳，粘贴命令时要留意'
+    )
+  }
+
+  try {
+    await fs.access(pdf)
+  } catch {
+    const lines = [
+      `找不到文件：${pdf}`,
+      '请检查路径与文件名；路径里有空格时要用英文双引号把整条路径包起来。'
+    ]
+    try {
+      const siblings = (await fs.readdir(path.dirname(pdf))).filter((f) =>
+        f.toLowerCase().endsWith('.pdf')
+      )
+      if (siblings.length > 0) {
+        lines.push('该目录下的 PDF 有：')
+        for (const name of siblings) lines.push(`  ${name}`)
+      }
+    } catch {
+      // 目录本身读不到就不列候选了
+    }
+    fail(...lines)
   }
 
   const root = await fs.mkdtemp(join(tmpdir(), 'ai-note-translate-e2e-'))
@@ -38,8 +71,7 @@ async function main(): Promise<void> {
   const blocksFile = await readJson<BlocksFile>(libraryPaths(root, entry.id).blocks)
   const blocks = blocksFile?.blocks ?? []
   if (blocks.length === 0) {
-    console.error('这篇论文没有解析出任何段落，先检查计划一的解析结果')
-    process.exit(1)
+    fail('这篇论文没有解析出任何段落，先检查计划一的解析结果')
   }
 
   const profile: AiProfile = {
@@ -77,8 +109,8 @@ async function main(): Promise<void> {
   const elapsed = Math.round((Date.now() - started) / 1000)
   const onDisk = await readTranslation(root, entry.id)
   const entries = Object.entries(onDisk?.blocks ?? {})
-  const done = entries.filter(([, v]) => v.status === 'done').length
-  const failed = entries.filter(([, v]) => v.status === 'failed').length
+  const done = entries.filter(([, value]) => value.status === 'done').length
+  const failed = entries.filter(([, value]) => value.status === 'failed').length
 
   console.log('---')
   console.log(`耗时 ${elapsed} 秒`)
@@ -93,4 +125,7 @@ async function main(): Promise<void> {
   if (!keep) await fs.rm(root, { recursive: true, force: true })
 }
 
-void main()
+void main().catch((err: unknown) => {
+  console.error(`运行失败：${err instanceof Error ? err.message : String(err)}`)
+  process.exit(1)
+})
